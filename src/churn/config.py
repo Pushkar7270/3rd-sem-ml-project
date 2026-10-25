@@ -27,6 +27,12 @@ METADATA_PATH = ARTIFACT_DIR / "metadata.json"
 SCORED_CUSTOMERS_PATH = PROCESSED_DIR / "scored_customers.csv"
 MODEL_CARD_PATH = REPORT_DIR / "model_card.md"
 
+# Operational SQLite database (prediction audit trail, feedback, retention actions).
+DB_PATH = Path(os.getenv("CHURN_DB_PATH", PROCESSED_DIR / "churn.db"))
+
+# Built React dashboard, served by the API at /app.
+FRONTEND_DIR = Path(os.getenv("CHURN_FRONTEND_DIR", ROOT_DIR / "frontend" / "dist"))
+
 # --------------------------------------------------------------------------- #
 # Reproducibility
 # --------------------------------------------------------------------------- #

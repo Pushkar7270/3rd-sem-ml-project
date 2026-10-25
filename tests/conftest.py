@@ -91,7 +91,11 @@ def api_paths(tmp_path_factory):
         "test_results": {"LogisticRegression": test_metrics},
         "final_test_metrics": test_metrics,
         "pr_baseline": round(float(y_test.mean()), 4),
-        "global_importance": [],
+        "global_importance": [
+            {"feature": "tenure", "label": "Tenure (months)", "importance": 0.61},
+            {"feature": "Contract", "label": "Contract", "importance": 0.52},
+            {"feature": "MonthlyCharges", "label": "Monthly charges ($)", "importance": 0.34},
+        ],
         "global_importance_encoded": [],
         "native_importance": native_importance(pipeline),
         "explainability": {
@@ -140,13 +144,14 @@ def api_paths(tmp_path_factory):
 
 
 @pytest.fixture()
-def app(api_paths):
+def app(api_paths, tmp_path):
     return create_app(
         bundle_path=api_paths.bundle_path,
         scored_path=api_paths.scored_path,
         data_path=api_paths.raw_path,
         report_dir=api_paths.report_dir,
-        mount_static=False,
+        db_path=tmp_path / "operational.db",
+        mount_static=True,
     )
 
 

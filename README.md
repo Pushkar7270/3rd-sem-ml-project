@@ -20,8 +20,9 @@ An end-to-end, explainable customer-churn system built on the **IBM Telco Custom
 | Explain predictions | Global and per-customer SHAP, native coefficients/importances, EDA |
 | Find likely leavers | Ranked `/customers/high-risk` endpoint over the scored customer book |
 | Retain customers | 14-rule playbook driven by risk level and SHAP drivers, ranked by priority |
-| Serve a frontend | FastAPI + OpenAPI docs, field specification, EDA JSON, static report figures |
-| Prove quality | 148 automated tests, lint-clean, reproducible training artifacts |
+| Use the system | Dark RetainIQ dashboard at `/app/`, FastAPI + OpenAPI docs, CSV export |
+| Persist work | SQLite prediction audit trail, outcome feedback and saved retention actions (no sign-in) |
+| Prove quality | 166 automated tests, lint-clean, reproducible training artifacts |
 
 ### Results at a glance
 
@@ -59,23 +60,28 @@ At the deployed threshold (**0.32**, tuned on out-of-fold predictions for F1):
 ## 2. Architecture
 
 ```text
-                    ┌─────────────────────────────────────────────┐
-  Frontend / curl ──▶│              FastAPI backend                │
-                    │  /predict  /predict/batch  /customers/*     │
-                    │  /model/*  /eda/summary     /figures/*       │
-                    └──────────────────┬──────────────────────────┘
-                                       │
-                            ┌──────────▼──────────┐
-                            │    ChurnService     │
-                            │  scoring + explain  │
-                            │  + recommendations  │
-                            └────┬───────────┬────┘
-                                 │           │
-            ┌────────────────────▼──┐   ┌────▼─────────────────────┐
-            │ artifacts/model.joblib│   │ data/processed/          │
-            │ pipeline + threshold  │   │ scored_customers.csv     │
-            │ background + metadata │   │ raw Telco CSV            │
-            └───────────────────────┘   └──────────────────────────┘
+┌──────────────────────────┐        ┌──────────────────────────────────┐
+│ RetainIQ dashboard       │  HTTP  │ FastAPI backend                  │
+│ /app/ · React + Vite     │───────▶│ /predict · /customers · /model   │
+│ Overview · Customers     │        │ /actions · /history · /feedback  │
+│ Predict · Insights       │        └───────────────┬──────────────────┘
+│ Queue · History          │                        │
+└──────────────────────────┘              ┌─────────▼──────────┐
+                                          │    ChurnService    │
+                                          │ score · explain    │
+                                          │ risk · playbook    │
+                                          └────┬───────────┬───┘
+                                               │           │
+                         ┌─────────────────────▼──┐   ┌────▼─────────────────────┐
+                         │ artifacts/model.joblib │   │ SQLite churn.db           │
+                         │ pipeline + threshold   │   │ predictions · feedback    │
+                         │ background + metadata  │   │ retention actions         │
+                         └────────────────────────┘   └───────────────────────────┘
+                                      │
+                         ┌────────────▼─────────────┐
+                         │ data/processed/          │
+                         │ scored_customers.csv     │
+                         └──────────────────────────┘
 ```
 
 ### Project layout
@@ -92,15 +98,19 @@ At the deployed threshold (**0.32**, tuned on out-of-fold predictions for F1):
 │   ├── risk.py            # risk bands + revenue/CLV estimates
 │   ├── recommend.py       # retention playbook engine
 │   ├── plots.py           # all report figures
+│   ├── db.py              # SQLite: prediction history, feedback, actions
 │   ├── artifacts.py       # atomic bundle persistence + validation
 │   └── api/
 │       ├── main.py        # FastAPI app factory and routes
 │       ├── service.py     # framework-agnostic application service
 │       └── schemas.py     # Pydantic contracts + frontend field spec
+├── frontend/              # React 19 + Vite source, dist served at /app/
+├── docs/                  # Word documentation + Claude PPT master prompt
 ├── scripts/download_data.py
-├── tests/                 # 148 unit, contract and integration tests
+├── scripts/generate_project_docs.py
+├── tests/                 # 166 unit, contract and integration tests
 ├── artifacts/             # generated model.joblib + metadata.json
-├── data/                  # raw + scored data (gitignored)
+├── data/                  # raw + scored data + churn.db (gitignored)
 ├── reports/               # model card, metrics, 13 figures (gitignored)
 ├── Makefile
 └── pyproject.toml
@@ -122,9 +132,15 @@ uv run python scripts/download_data.py
 # 3. Train, evaluate, explain, score all customers, write reports
 uv run churn-train          # ~40 seconds on a laptop
 
-# 4. Serve the API
-uv run churn-serve          # http://127.0.0.1:8000  (docs at /docs)
+# 4. Serve the API + dashboard
+uv run churn-serve          # http://127.0.0.1:8000  (dashboard at /app/, docs at /docs)
+
+# 5. Optional: regenerate the Word documentation
+uv run python scripts/generate_project_docs.py
 ```
+
+Open **http://127.0.0.1:8000/app/** for the RetainIQ dashboard. No Node.js is needed to
+run the prebuilt React bundle, no database server is required, and there is no sign-in.
 
 Or use the shortcuts:
 
@@ -282,6 +298,17 @@ Full interactive documentation: **`/docs`** (Swagger UI) and **`/openapi.json`**
 | `GET` | `/eda/summary` | Churn rates, distributions, correlations, risk mix |
 | `GET` | `/figures` | JSON index of generated figures |
 | `GET` | `/figures/*`, `/reports/*` | Generated PNG figures and reports |
+| `GET` | `/dashboard/summary` | KPI payload for the overview page |
+| `POST` | `/actions` | Save a recommended playbook action |
+| `GET` | `/actions` | List/filter saved actions (`status`, `customer_id`) |
+| `GET` | `/actions/summary` | Workflow counts by status |
+| `PATCH` | `/actions/{id}` | Update action status or note |
+| `DELETE` | `/actions/{id}` | Remove an action from the queue |
+| `GET` | `/history` | Recent prediction audit trail |
+| `GET` | `/history/stats` | Prediction/feedback KPIs |
+| `POST` | `/feedback` | Record whether a scored customer actually churned |
+| `GET` | `/db/status` | SQLite engine, file size and table counts |
+| `GET` | `/app/` | RetainIQ React dashboard (compiled Vite bundle) |
 
 ### Score a customer
 
@@ -356,13 +383,58 @@ curl 'http://127.0.0.1:8000/eda/summary'
 
 ### Frontend integration notes
 
-1. Build the form from `GET /model/features` (types, options, ranges, defaults). `tenure` and `MonthlyCharges` are required; other fields fall back to documented defaults.
-2. `POST /predict` returns everything needed for a result card: probability, band, drivers, actions, revenue exposure. Use `top_risk_driver` for the headline reason.
-3. Use `/customers/high-risk` for the work queue (`top_risk_driver`, no live SHAP) and `/customers/{id}` for the drill-down (full drivers + playbook).
-4. `/eda/summary` powers KPI cards and segment charts; ROC/PR points for custom charts are in `/model/metrics`.
-5. Figure URLs are listed by `GET /figures` and can be embedded directly.
-6. CORS is open by default for local development; set `CHURN_CORS_ORIGINS` in production.
-7. The API returns `503` with a helpful message when no trained model is present, and `422` for invalid or incomplete payloads.
+1. Open the dashboard at **`/app/`**. FastAPI serves the compiled React bundle from `frontend/dist/`.
+2. Build the form from `GET /model/features` (types, options, ranges, defaults). `tenure` and `MonthlyCharges` are required; other fields fall back to documented defaults.
+3. `POST /predict` returns everything needed for a result card: probability, band, drivers, actions, revenue exposure. Use `top_risk_driver` for the headline reason.
+4. Use `/customers/high-risk` for the work queue (`top_risk_driver`, no live SHAP) and `/customers/{id}` for the drill-down (full drivers + playbook).
+5. `/eda/summary` powers KPI cards and segment charts; ROC/PR points for custom charts are in `/model/metrics`.
+6. Figure URLs are listed by `GET /figures` and can be embedded directly.
+7. CORS is open by default for local development; set `CHURN_CORS_ORIGINS` in production.
+8. The API returns `503` with a helpful message when no trained model is present, and `422` for invalid or incomplete payloads.
+
+### Frontend and operational database
+
+The dashboard is a **React 19 + Vite** single-page application intentionally styled
+after the supplied dark/neon-green retention SaaS reference. The compiled bundle is
+committed in `frontend/dist/`, so the API can serve it without Node. Node is only
+needed when you want to change the frontend source. Surfaces use a glassmorphism
+treatment — translucent panels, backdrop blur, soft highlights and ambient mint
+glows — while preserving readable contrast.
+
+| Page | What it shows |
+| --- | --- |
+| Overview | Hero, KPIs, risk donut, contract churn, model gauge, global drivers, high-risk queue, recent activity |
+| Customers | Risk-band tabs, search, pagination, CSV export and a live customer drawer |
+| Score customer | Validated form, high/low demo profiles, probability gauge, SHAP drivers and playbook |
+| Model insights | Six-model comparison, ROC curve, SHAP drivers, segment charts and report gallery |
+| Retention queue | Saved actions with pending / contacted / accepted / declined workflow |
+| Score history | Prediction audit trail, outcome feedback and SQLite status |
+
+**Database:** SQLite, embedded in Python, at `data/processed/churn.db`. It is created
+automatically. No database server, account, password or sign-in is required. Three
+tables are used:
+
+- `predictions` — every score served (probability, risk, threshold, revenue, payload)
+- `feedback` — observed outcomes linked to a prediction
+- `retention_actions` — saved playbook actions with workflow status
+
+SQLite is ideal for the local viva demo; the API contract can move to PostgreSQL
+later without changing the frontend.
+
+### Frontend development
+
+The React source lives in `frontend/src/` (components, pages, API client, shared styles).
+The production bundle in `frontend/dist/` is what FastAPI serves.
+
+```bash
+cd frontend
+npm install          # once
+npm run dev          # Vite dev server on :5173, proxies API calls to :8000
+npm run build        # rebuild frontend/dist
+```
+
+`npm` is only required for frontend development; `uv run churn-serve` works with the
+prebuilt bundle.
 
 ---
 
@@ -374,6 +446,9 @@ After `uv run churn-train`:
 | --- | --- |
 | `artifacts/model.joblib` | Fitted pipeline, threshold, background sample, metadata |
 | `artifacts/metadata.json` | Full experiment metadata and metrics |
+| `data/processed/churn.db` | SQLite prediction history, feedback and saved actions |
+| `docs/Telco_Churn_Project_Documentation.docx` | Full Word report: methodology, results, frontend usage tutorial, viva Q&A, contribution table, Claude PPT prompt |
+| `docs/claude_ppt_master_prompt.txt` | Copy-paste master prompt for a free python-pptx deck |
 | `reports/model_card.md` | Model card: dataset, method, metrics, drivers, limitations |
 | `reports/metrics.json` | Same metadata in JSON |
 | `reports/cv_results.csv` / `test_results.csv` | Model comparison tables |
@@ -387,7 +462,7 @@ The bundle is versioned (`format_version`) and written atomically, so a running 
 ## 9. Tests and code quality
 
 ```bash
-uv run pytest -q                     # 148 tests
+uv run pytest -q                     # 166 tests
 uv run pytest --cov=churn            # optional coverage
 uv run ruff check src tests scripts  # lint
 ```

@@ -225,3 +225,7 @@ data/processed/
 artifacts/
 reports/
 *.joblib
+
+# Ship the compiled React dashboard so the API can serve it without Node.
+!frontend/dist/
+!frontend/dist/**

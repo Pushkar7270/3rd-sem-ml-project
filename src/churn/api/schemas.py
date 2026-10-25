@@ -221,6 +221,53 @@ class HighRiskListOut(BaseModel):
     customers: list[HighRiskCustomerOut]
 
 
+ActionStatus = Literal["pending", "contacted", "accepted", "declined"]
+
+
+class ActionCreate(BaseModel):
+    customer_id: str = Field(..., min_length=1, max_length=64)
+    recommendation_id: str = Field(..., min_length=1, max_length=32)
+    status: ActionStatus = "pending"
+    note: str | None = Field(None, max_length=1000)
+    # Optional snapshot for ad-hoc scores that are not in the customer book.
+    # When the customer exists, the server validates the recommendation and
+    # overwrites these fields with canonical values.
+    title: str | None = Field(None, max_length=300)
+    offer: str | None = Field(None, max_length=500)
+    risk_level: Literal["low", "medium", "high"] | None = None
+    churn_probability: float | None = Field(None, ge=0.0, le=1.0)
+
+
+class ActionUpdate(BaseModel):
+    status: ActionStatus | None = None
+    note: str | None = Field(None, max_length=1000)
+
+    @model_validator(mode="after")
+    def _require_change(self) -> ActionUpdate:
+        if self.status is None and self.note is None:
+            raise ValueError("Provide at least one of status or note")
+        return self
+
+
+class ActionOut(BaseModel):
+    id: int
+    customer_id: str
+    recommendation_id: str
+    title: str
+    offer: str
+    risk_level: str
+    churn_probability: float
+    status: ActionStatus
+    note: str | None = None
+    created_at: str
+    updated_at: str
+
+
+class ActionListOut(BaseModel):
+    total: int
+    actions: list[ActionOut]
+
+
 class HealthOut(BaseModel):
     status: str
     model_loaded: bool
@@ -229,6 +276,14 @@ class HealthOut(BaseModel):
     threshold: float | None
     scored_customers: int
     api_version: str
+
+
+class FeedbackIn(BaseModel):
+    """Close the loop: record whether a scored customer actually churned."""
+
+    prediction_id: int = Field(..., ge=1, description="Row id returned by /history.")
+    actual_churn: bool = Field(..., description="True if the customer later churned.")
+    notes: str | None = Field(None, max_length=500, description="Optional reviewer note.")
 
 
 # --------------------------------------------------------------------------- #

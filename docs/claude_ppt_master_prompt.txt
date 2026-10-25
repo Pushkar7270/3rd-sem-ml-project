@@ -1,0 +1,72 @@
+You are a senior presentation designer and data storyteller. Create a complete, presentation-ready, 16:9 PowerPoint deck for a 3rd-semester machine-learning project called "Telco Churn Intelligence" (product name: RetainIQ). The deck must be suitable for a 10-minute viva presentation and a 5-minute demo.
+
+NON-NEGOTIABLE CONSTRAINTS
+- Use only free, open, no-paywall tools and assets. Do not use paid templates, paywalled stock-photo sites, login-gated plugins, watermarked assets or premium AI slide generators.
+- Authentication is out of scope. Do not add login, signup, paywall or subscription screens. The demo is a local, no-auth dashboard.
+- Generate the deck with python-pptx (free and open source). Return ONE complete runnable Python script in a single code block, plus the exact install command.
+- Do NOT invent metrics, names or features. Use only the project facts below. If a fact is missing, write [VERIFY] instead of guessing.
+- Use native editable charts and shapes where possible; do not embed random internet images. If local screenshots are available, reference these paths: docs/screenshots/overview.png, docs/screenshots/customer_drawer.png, docs/screenshots/insights.png.
+- Keep text large and sparse: title 30-36pt, body 16-20pt, footnotes 10-12pt, maximum 5 bullets per slide.
+
+PROJECT FACTS (exact)
+- Dataset: IBM Telco Customer Churn, 7,043 customers, 21 raw columns, 26.5% churn; stratified 80/20 split (5,634 train / 1,409 test).
+- Task: supervised binary classification (churn vs stay).
+- Models compared: Logistic Regression, Decision Tree, Random Forest, XGBoost, KNN, SVM.
+- 5-fold CV ROC-AUC: LR 0.8475, XGBoost 0.8409, Random Forest 0.8359, Decision Tree 0.8265, KNN 0.8117, SVM 0.7984.
+- Selected model: Logistic Regression (highest CV ROC-AUC; XGBoost close but more complex).
+- Test metrics at threshold 0.32: ROC-AUC 0.8456, PR-AUC 0.6519, recall 0.7406, precision 0.5410, F1 0.6253, Brier 0.1362.
+- Confusion matrix: TN 800, FP 235, FN 97, TP 277.
+- Risk bands: low < 0.32 (4,552 customers), medium 0.32-0.60 (1,489), high >= 0.60 (1,002).
+- Engineered features: NumServices, SupportServices, StreamingServices, IsNewCustomer, HasFamily. Ratio features were removed due to collinearity and unstable SHAP.
+- Explainability: LinearSHAP for the selected model, TreeSHAP for tree models, permutation SHAP fallback, coefficients and native feature importance.
+- Top global drivers: internet service, contract, tenure, monthly charges, streaming services, payment method, new-customer status, online security.
+- Recommendation engine: 14 rules, e.g. annual contract conversion, fiber plan review, autopay migration, tech-support trial, onboarding, loyalty review, senior support, bill clarity, streaming bundle, device protection, targeted save offer, low-risk nurture.
+- Risk formulas: annual revenue at risk = monthly charges x 12 x P(churn); expected remaining months = min(1/P(churn), 72); estimated CLV = monthly charges x expected remaining months.
+- System: FastAPI + Pydantic backend; scikit-learn/XGBoost/SHAP model bundle; SQLite for prediction history, feedback and saved actions; React + Vite dashboard served at /app/.
+- Dashboard pages: Overview, Customers, Score customer, Model insights, Retention queue, Score history.
+- Key API endpoints: /dashboard/summary, /model/info, /model/metrics, /model/features, /predict, /predict/batch, /customers/high-risk, /customers/{id}, /eda/summary, /actions, /history, /feedback.
+- Testing: 166 automated tests, ruff clean, Playwright UI smoke test with zero console errors.
+- Team: Pushkar (project lead, ML & backend, 45%), Karan (research, frontend & visual design, 35%), Shaurya (data validation, testing & documentation support, 20%).
+- Demo URL: http://127.0.0.1:8000/app/
+- Dataset source: IBM Telco Customer Churn, Kaggle (blastchar/telco-customer-churn).
+- The system is a decision-support prototype. SHAP is not causality; recommendations are heuristics, not uplift estimates.
+
+DECK STRUCTURE (16 slides)
+1. Title: Telco Churn Intelligence / RetainIQ. Subtitle: explainable churn prediction and retention. Team names.
+2. The business problem: churn reduces recurring revenue and raises acquisition cost; basic predictions do not explain or act.
+3. Project objectives: predict, explain, prioritise and recommend.
+4. Dataset at a glance: 7,043 customers, 21 columns, 26.5% churn, key attributes.
+5. EDA story: contract, internet, payment and tenure insights (use 2-3 headline numbers).
+6. Cleaning and feature engineering: TotalCharges semantic zeros, engineered features, withheld customerID.
+7. Leak-free pipeline: train/test split, imputation, scaling, one-hot, pipeline inside CV.
+8. Six models compared: why each family, 5-fold CV protocol, selection on ROC-AUC.
+9. Results: CV table and held-out metrics; Logistic Regression selected; XGBoost close.
+10. Threshold and confusion matrix: why 0.32; recall vs precision trade-off.
+11. Explainability: SHAP global and local; show "tenure increases risk" and "month-to-month increases risk".
+12. Risk scoring and business value: three bands, revenue at risk, CLV.
+13. Personalised retention: 14-rule playbook; show three concrete examples.
+14. System architecture and demo: FastAPI, model bundle, SQLite, dashboard pages; include a screenshot placeholder.
+15. Testing, limitations and responsible use.
+16. Conclusion, team contributions, Q&A.
+
+DESIGN SYSTEM
+- 16:9 widescreen.
+- Background: near-black #07100D with subtle dark-green radial/dot texture.
+- Primary accent: mint green #2FF0A3; secondary: amber #F4B860 and coral #FF6379 for risk.
+- Text: warm white #EAF8F2; muted #7D978D.
+- Font: Inter or Calibri fallback; bold headings, generous whitespace.
+- Use thin 1px borders and rounded rectangles; no gradients on text except the title accent.
+- Charts: mint bars/curves on dark grid; label axes and values; avoid 3D charts.
+- Each slide: a small section label, a large takeaway headline (not just a topic label), one visual, 3-5 short bullets, and a source footnote.
+- Use simple shapes/Unicode symbols as icons; do not download paid icons.
+
+SPEAKER NOTES
+For every slide include 60-110 words of speaker notes written in a confident student-presenter voice. Include one likely examiner question and a one-line answer in the notes for slides 8-14.
+
+DELIVERABLE
+1. The complete python-pptx script (one code block), with a `main()` and `if __name__ == "__main__":`.
+2. The install command: `pip install python-pptx`.
+3. A short README block explaining how to run it and where the .pptx is saved.
+4. A one-page handout outline with the 10 most important facts.
+5. Do not use Markdown tables inside slides; build tables with python-pptx shapes.
+Return only the final script and the short instructions.

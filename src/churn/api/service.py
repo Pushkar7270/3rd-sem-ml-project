@@ -170,6 +170,59 @@ class ChurnService:
             "api_version": config.API_VERSION,
         }
 
+    def dashboard_summary(self) -> dict[str, Any]:
+        """KPI payload for the frontend overview page."""
+        scored = self._require_scored()
+        total = int(len(scored))
+        risk_counts = {
+            level: int((scored["risk_level"] == level).sum()) for level in ("low", "medium", "high")
+        }
+        metrics = self.metadata.get("final_test_metrics", {})
+        cv = self.metadata.get("cv_results", {}).get(self.model_name, {}).get("roc_auc", {})
+        revenue = (
+            scored.groupby("risk_level")["annual_revenue_at_risk"].sum().to_dict()
+            if "annual_revenue_at_risk" in scored
+            else {}
+        )
+        churned = (
+            int(scored["actual_churn"].sum())
+            if "actual_churn" in scored
+            else int(round(total * float(self.metadata.get("dataset", {}).get("churn_rate", 0))))
+        )
+        return {
+            "model": {
+                **self.model_ref(),
+                "threshold": round(self.threshold, 4),
+                "cv_roc_auc": cv.get("mean"),
+                "cv_roc_auc_std": cv.get("std"),
+                "test_roc_auc": metrics.get("roc_auc"),
+                "test_pr_auc": metrics.get("pr_auc"),
+                "recall": metrics.get("recall"),
+                "precision": metrics.get("precision"),
+                "f1": metrics.get("f1"),
+                "brier": metrics.get("brier"),
+                "trained_at": self.metadata.get("trained_at"),
+            },
+            "customers": {
+                "total": total,
+                "churned": churned,
+                "retained": total - churned,
+                "churn_rate": round(churned / total, 4) if total else 0.0,
+            },
+            "risk": {
+                **risk_counts,
+                "high_share": round(risk_counts["high"] / total, 4) if total else 0.0,
+            },
+            "revenue_at_risk": {
+                "high": round(float(revenue.get("high", 0.0)), 2),
+                "medium": round(float(revenue.get("medium", 0.0)), 2),
+                "low": round(float(revenue.get("low", 0.0)), 2),
+                "total": round(float(sum(revenue.values())), 2),
+            },
+            "top_drivers": self.metadata.get("global_importance", [])[:6],
+            "risk_bands": self.metadata.get("risk_bands", risk_band_details()),
+        }
+
     # ------------------------------------------------------------------ #
     # Predictions
     # ------------------------------------------------------------------ #
