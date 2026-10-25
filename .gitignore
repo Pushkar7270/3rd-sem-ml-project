@@ -218,3 +218,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Machine learning project artifacts
+data/raw/
+data/processed/
+artifacts/
+reports/
+*.joblib
